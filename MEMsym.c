@@ -22,7 +22,7 @@ typedef  struct
 
 int existeFichero(char* str);
 void LimpiarCACHE(T_CACHE_LINE tbl[NUM_LINEAS_CACHE]);
-void leerFichero(FILE* descriptor, char linea[]);
+int leerFichero(FILE* descriptor, char linea[]);
 char *leelineaDinamicaFichero (FILE *fd);
 unsigned char** leerLineasDinamicasFicheo(FILE* descriptor, int *i);
 void conversorHexadecimalDecimal(unsigned char* hexa, unsigned int* addr);
@@ -77,17 +77,27 @@ int main(int argc, char* argv[]){
 			globaltime=globaltime+20;
 			//ENSEÑAMOS EL FALLO
 			printf("T: %d, Fallo de CACHE %d, ADDR %04X, Label %X, linea %02X, palabra %02X, bloque %02X\n",i+1,numfallos,addr,ETQ,linea, palabra, bloque);
+			
+		}else{
+
+			//GUARDAMOS EL ACIERTO			
+			printf("T: %d, Acierto de CACHE, ADDR %04X, Label%X, linea %02X, palabra %02X, DATO %c\n\n",i+1,addr,ETQ,linea, palabra, texto[aciertos]);
 		}
+
+			// RECUPERAMOS EL DATO, HAYA HIT O MISS
+			if (aciertos >= (int)sizeof(texto) - 1) {
+				fprintf(stderr, "Error: texto demasiado largo\n");
+				break;
+			}
+			texto[aciertos]=cache[linea].Data[15-palabra];
+			aciertos++;
 			//ENSEÑAMOS DONDE SE CARGAN LOS DATOS
 			printf("Se ha cargado en el bloque %02X, en la linea %02X.\n", bloque, linea);
-			//GUARDAMOS EL ACIERTO
-			texto[aciertos]=cache[linea].Data[15-palabra];
-			printf("T: %d, Acierto de CACHE, ADDR %04X, Label%X, linea %02X, palabra %02X, DATO %c\n\n",i+1,addr,ETQ,linea, palabra, texto[aciertos]);
-			aciertos++;
+			
 			//AUMENTAMOS EL TIEMPO GLOBAL EN 1 Y HACEMOS UN SLEEP DE 1S
 			globaltime++;
 			sleep(1);
-		
+			
 		//ENSEÑAMOS LOS DATOS DE LA ACHE
 		for(int j=0; j<NUM_LINEAS_CACHE;j++){
 			printf("%x\t", cache[j].ETQ);
@@ -100,7 +110,7 @@ int main(int argc, char* argv[]){
         
     }
 	//PRINTEAMOS LOS DATOS
-	printf("Accesos totales: %d; fallos %d; tiempo medio  %f \n",struct_direcciones.num_direcciones_memoria, numfallos, (float)((float)globaltime/14));
+	printf("Accesos totales: %d; fallos %d; tiempo medio  %f \n",struct_direcciones.num_direcciones_memoria, numfallos, (float)((float)globaltime / struct_direcciones.num_direcciones_memoria));
 	printf("El texto es %s", texto);
 	//VOLCAMOS LOS DATOS AL FICHERO "CONTENTS_CACHE.bin"
 	VolcarCACHE(cache);
@@ -131,12 +141,22 @@ void LimpiarCACHE(T_CACHE_LINE tbl[NUM_LINEAS_CACHE]){
 }
 
 //LEE UNA LINEA DEL FICHERO Y TE LO DEVUELVE EN ARRAY ESTATICO
-void leerFichero(FILE* descriptor, char linea[]){
-    int  t=0;
-	char c;
-	while( (((linea[t]=getc(descriptor))!=EOF)&&(linea[t]!='\n'))  && TAM_RAM>t ){
-		t++;
-    }
+int leerFichero(FILE* descriptor, char linea[]){
+	FILE* fichero = fopen("CONTENTS_RAM.bin", "rb");
+
+	if (fichero == NULL) {
+		perror("Error abriendo RAM");
+		return -1;
+	}
+
+	size_t leidos = fread(linea, 1, TAM_RAM, fichero);
+	fclose(fichero);
+
+	if (leidos != TAM_RAM) {
+		fprintf(stderr, "Error: RAM incompleta\n");
+		return -1;
+	}
+	return 1;
 }
 
 //LEE UNA LINEA DEL FICHERO Y TE LO VEVUELVE EN ARRAY DINAMICO
@@ -182,7 +202,7 @@ unsigned int* conversorDecimalBinario(unsigned int* decimal){
 		binario[i]=*decimal%2;
 		*decimal=*decimal/2;
 	}
-	binario[13]='\0';
+	binario[12]='\0';
 	
 	return binario;
 	
@@ -226,7 +246,7 @@ void VolcarCACHE(T_CACHE_LINE *tbl){
 	FILE* fichero;
 	int* binario;
 	fichero = fopen( "CONTENTS_CACHE.bin" , "w");
-	for(int i=0;i<TAM_RAM;i++){
+	for(int i=0;i<NUM_LINEAS_CACHE;i++){
 		 fprintf(fichero, "FILA %d %02x\t",i ,tbl[i].ETQ);
 		 for(int t=0;t<TAM_LINEA;t++){
 		 	fprintf(fichero, " %02X ",tbl[i].Data[t]);
